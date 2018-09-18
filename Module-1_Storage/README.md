@@ -60,21 +60,26 @@ Use the console or AWS CLI to create an Amazon S3 bucket. Keep in mind that your
 
 ### 2. Upload Content
 
+#### High-Level Instructions
+
 Upload the NYC data set for this module to your S3 bucket inside prefix /raw. You can use the AWS CLI tool or the AWS Management Console (requires Google Chrome browser). If your local internet speed is too slow or the upload process takes a long time, [launch a new EC2 instance](https://docs.aws.amazon.com/quickstarts/latest/vmlaunch/step-1-launch-instance.html) and use the AWS CLI on the remote terminal.
 
 <details>
 <summary><strong>CLI step-by-step instructions (expand for details)</strong></summary><p>
 
 Execute the following command making sure to replace `YOUR_BUCKET_NAME` with the name you used in the previous section and `YOUR_BUCKET_REGION` with the region code (e.g. ap-southeast-2) where you created your bucket.
-
+    ``` shell
     ssh -i <your_local_ssh_key.pem> ec2-user@<EC2_Public_IP_Address>
-
-    aws s3 sync s3://injae-groupm/ s3://YOUR_BUCKET_NAME/raw/ --region YOUR_BUCKET_REGION
-
+    ```
+    ``` shell
+    aws s3 cp s3://injae-groupm/ s3://YOUR_BUCKET_NAME/raw/ --recursive --region YOUR_BUCKET_REGION
+    ```
 If the command was successful, you should see a list of objects that were copied to your bucket.
 </p></details>
 
 ### 3. Event Driven Notification with S3
+
+#### High-Level Instructions
 
 [Enable S3 event notification](https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html) for your bucket where a `ObjectCreate(All)` operation inside prefix `/raw` will trigger a Lambda function. You can use an existing blue print lambda function called `s3-get-object` and test to see if it is triggered automatically by reuploading the taxi data set to your bucket.
 
@@ -103,12 +108,16 @@ You can view successful lambda invocation in the lambda console and the console 
 1. Finish Creating the function
 
 1. Upload the taxi data set again to the S3 bucket (check upload path to /raw) and look for Invocations in the Monitoring Tab from Lambda console. Check for console output by clicking on View logs in CloudWatch. You should have an output similar to this CONTENT TYPE: text/csv
-
+    
+    ``` shell
     aws s3 cp s3://YOUR_BUCKET/raw/ s3://YOUR_BUCKET/raw/ --recursive --metadata-directive REPLACE --region YOUR_BUCKET_REGION
+    ```
 
 </p></details>
 
 ### 4. [Advanced - Optional] Basic ETL with AWS Lambda
+
+#### High-Level Instructions
 
 Create a Lambda function that will parse the taxi data files and look for rows where the value for VendorID column is 2. Then, output the results into new CSV files called `FILENAME-VendorID-2.csv` in prefix VendorID2.
 
@@ -119,7 +128,7 @@ Normally, you would use an alternative compute method such as EC2 or distributed
 <details>
 <summary><strong>Example Python Lambda code (expand for details)</strong></summary><p>
 
-1. Create a new lambda function that will be triggered by new objects created in the /raw prefix
+1. Create a new lambda function that will be triggered by new objects created in the /raw prefix (you will need to include the pandas module as part of the lambda deployment file)
 
 1. Lambda function with S3 event trigger
 ``` python

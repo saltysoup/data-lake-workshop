@@ -37,7 +37,6 @@ Once you've chosen a region, you should deploy all of the resources for this wor
 ### 1. Create a Kinesis Data Stream
 You can use [Kinesis Data Streams](https://aws.amazon.com/kinesis/data-streams/) for rapid and continuous data intake and aggregation. The type of data used can include IT infrastructure log data, application logs, social media, market data feeds, and web clickstream data. Because the response time for the data intake and processing is in real time, the processing is typically lightweight. In this step, you'll create a new Data Stream and put new records in, which we will later consume to process downstream.
 
-
 #### High-Level Instructions
 
 Use the console or AWS CLI to create a Kinesis Data Stream with 1 Shard (1MB Write/sec and 2MB Read/sec)
@@ -60,52 +59,168 @@ aws kinesis create-stream --stream-name YOUR_STREAM_NAME --shard-count 1 --regio
 
 </p></details>
 
-### 2. Create a Kinesis Data Producer
+### 2. Create a Kinesis Data Producer using Kinesis Agent
 Although optional, it is **highly recommended** to use an EC2 instance for this module to avoid long wait times between downloads/uploads of files.
 
-Download a copy of all the NYC taxi data files from s3://YOUR_BUCKET_NAME/raw/ and create a script that will convert the CSV files and upload to your Data Stream as a JSON payload.
+#### High-Level Instructions
+
+Follow the instructions for setting up [Kinesis Agent](https://docs.aws.amazon.com/streams/latest/dev/writing-with-agents.html) and edit the configuration file `/etc/aws-kinesis/agent.json` to send data to your Kinesis Data Stream as JSON.
+
+Once the agent is running, download a copy of the NYC taxi data files from s3://YOUR_BUCKET_NAME/raw/ to the /tmp directory. If you have configured Kinesis Agent correctly, it should automatically detect the new files, transform the data into JSON and send the record to Kinesis Data Stream.
+
+Verify that your Kinesis Data Stream is receiving data inside the Monitoring section of Kinesis AWS Console.
 
 <details>
 <summary><strong>Step-by-step instructions (expand for details)</strong></summary><p>
 
-1. SSH into working instance and download taxi data
-    ssh -i <your_local_ssh_key.pem> ec2-user@<EC2_Public_IP_Address>
-    mkdir downloads
-    cd downloads
-    aws s3 sync s3://YOUR_BUCKET/raw/ .
+1. Create a new EC2 instance using the latest AWS Linux AMI with an IAM role that has the following permissions:
+    ``` json
+    {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "AllowKinesisWrites",
+                "Effect": "Allow",
+                "Action": [
+                    "kinesis:PutRecord"
+                ],
+                "Resource": [
+                    "arn:aws:kinesis:<REGION>:<ACCOUNTID>:stream/*"
+                ]
+            },
+            {
+                "Sid": "AllowCloudWatchMetricsWrites",
+                "Effect": "Allow",
+                "Action": [
+                    "cloudwatch:PutMetricData"
+                ],
+                "Resource": [
+                    "*"
+                ]
+            }
+        ]
+    }
+    ```
+1. SSH into your EC2 instance to download and install the agent
+    ``` shell
+    sudo yum install –y aws-kinesis-agent
+    ```
+    
+1. Open the Kinesis Agent configuration file and edit using your parameters
 
-1. Create a new python script that will convert the downloaded CSV files into JSON
+    ``` shell
+    sudo vim /etc/aws-kinesis/agent.json
+    ```
+    */etc/aws-kinesis/agent.json*
+    ``` shell
+    {
+        "cloudwatch.emitMetrics": true,
+        "kinesis.endpoint": "kinesis.<REGION>.amazonaws.com",
+        "flows": [
+            {
+            "filePattern": "/tmp/*.csv*",
+            "kinesisStream": "<KINESIS_DATA_STREAM_NANE>",
+            "partitionKeyOption": "RANDOM",
+            "initialPosition": "START_OF_FILE",
+                "dataProcessingOptions": [
+                    {
+                        "optionName": "CSVTOJSON",
+                        "customFieldNames": ["VendorID","tpep_pickup_datetime","tpep_dropoff_datetime","passenger_count","trip_distance","RatecodeID","store_and_fwd_flag","PULocationID","DOLocationID","payment_type","fare_amount","extra","mta_tax","tip_amount","tolls_amount","improvement_surcharge","total_amount"],
+                        "delimiter": ","
+                    }
+                ]
+            }
+        ]
+    }
+    ```
 
-``` python
+1. Start the Kinesis Agent service
+    ``` shell
+    sudo service aws-kinesis-agent start
+    ```
 
-```
+1.  Copy the NYC taxi data files into the /tmp directory to trigger the Kinesis Agent
+    ``` shell
+    aws s3 cp s3://YOUR_BUCKET/raw/ . --recursive --region YOUR_REGION
+    ```
 
-3. Create a new Kinesis Data Producer script that will put records into our Data Stream 
+1. Observe the Kinesis Agent processing your files
+    ``` shell
+    tail -f /var/log/aws-kinesis-agent/aws-kinesis-agent.log
+    ```
 
-``` python
-
-
-
-```
-
-
+1. Navigate to your Kinesis Data Stream in the AWS Console and observe the CloudWatch metrics in the Monitoring tab.
 
 </p></details>
 
 ### 3. Create a Kinesis Firehose to S3
-In this step, you will create a Kinesis Firehose consumer for the Kinesis Data Stream that will read off the stream's records and output a copy into an S3 bucket for persistent storage.
+In this step, you will create a Kinesis Firehose consumer for the Kinesis Data Stream that will output a copy into an S3 bucket for persistent storage.
 
-As Kinesis Data Stream can serve multiple consumers, Kinesis Firehose is an easy way to output a copy of the data into S3, ElasticSearch, Redshift or Splunk. For any other AWS services or data sources, you will need to create a custom application to consume and process the data using methods such as [Kinesis Client Library](https://github.com/awslabs/amazon-kinesis-client)
+As Kinesis Data Stream can serve multiple consumers, Kinesis Firehose is an easy way to output a copy of the data into S3, ElasticSearch, Redshift or Splunk. For any other AWS services or data stores, you will need to create a custom application to consume and process the data using methods such as [Kinesis Client Library](https://github.com/awslabs/amazon-kinesis-client).
 
-1. Create a new Kinesis Firehose from the AWS console or CLI and select the Source to the Kinesis Stream you created previously.
+#### High-Level Instructions
 
-1. Do not change the values for *Transform source records with AWS Lambda* or *Convert record format* and proceed to the next page (we will cover this in the next module)
+From the AWS console or CLI, create a new Kinesis Firehose that will be a consumer for the Kinesis Data Stream that we created previously. The Firehose should output the data into the `Firehose/` prefix of your S3 Bucket.
 
-1. Select Amazon S3 as the destination and choose YOUR_BUCKET_NAME and 
+eg. S3://YOUR_BUCKET/Firehose/YYYY/MM/DD/..
 
-### 4. [Advanced - Optional] Data Processing with AWS Lambda
-Data consumer for processing such as Hadoop clusters, Apache Storm, Spark
-kinesis-process-record-python blue print
+Verify that the data is now in JSON format by downloading an object from your S3 bucket in the Firehose prefix.
+
+<details>
+<summary><strong>Step-by-step instructions (expand for details)</strong></summary><p>
+
+1. Create a new Kinesis Firehose from the AWS console or CLI and select the *Source* to the Kinesis Data Stream you created previously.
+
+1. Do not change the values for *Transform source records with AWS Lambda* or *Convert record format* and proceed to the next page (we will cover this in the next module).
+
+1. Select *Amazon S3* as the destination and choose **YOUR_BUCKET_NAME** and **Firehose/** for Prefix and proceed to the next page.
+
+1. Select *Create new or choose* under IAM role and use the default generated policy. Proceed to finish the Firehose launch wizard.
+
+1. Navigate to your Amazon S3 Bucket and verify that new objects are being created in S3://YOUR_BUCKET/Firehose/YYYY/MM/DD/.. Download and confirm that the records are in JSON format and automatically batched to 5MB objects (default value).
+
+</p></details>
+
+### 4. [Advanced - Optional] Data Processing (consumer) with AWS Lambda
+Examples of Data Consumers for near-real time streams of data include Hadoop Clusters, Apache Storm and Apache Spark for downstream processing and applications.
+
+In this step, you'll be creating a consumer for the Kinesis Data Stream by creating a new lambda function that will decode the JSON payload and output to the console.
+
+#### High-Level Instructions
+
+Create a new lambda function using this [guide](https://docs.aws.amazon.com/lambda/latest/dg/with-kinesis-example.html) or from an existing lambda blueprint that will detect new records in the stream and output a decoded payload in console/CloudWatch logs.
+
+The output should look similar to this:
+
+
+``` json
+Decoded payload:
+{
+    "VendorID": "400499",
+    "tpep_pickup_datetime": "1",
+    "tpep_dropoff_datetime": "2017-12-02 03:04:43",
+    "passenger_count": "2017-12-02 03:12:24",
+    "trip_distance": "2",
+    "RatecodeID": "1.1",
+    "store_and_fwd_flag": "1",
+    "PULocationID": "N",
+    "DOLocationID": "249",
+    "payment_type": "234",
+    "fare_amount": "1",
+    "extra": "7.0",
+    "mta_tax": "0.5",
+    "tip_amount": "0.5",
+    "tolls_amount": "1.65",
+    "improvement_surcharge": "0.0",
+    "total_amount": "0.3"
+}
+```
+
+<details>
+<summary><strong>Step-by-step instructions (expand for details)</strong></summary><p>
+Use an existing lambda blueprint such as kinesis-process-record-python and configure the trigger to your Kinesis Data Stream.
+
+</p></details>
 
 
 
