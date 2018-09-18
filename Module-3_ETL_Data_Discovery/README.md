@@ -41,7 +41,7 @@ To create an ETL process for converting our JSON files into a Parquet format, yo
 
 #### High-Level Instructions
 
-Use the [crawler feature](https://docs.aws.amazon.com/glue/latest/dg/add-crawler.html) of AWS Glue to traverse the JSON files (created in Module 2) in the `Firehose/` prefix of our S3 bucket. Verify that the newly created Data Catalog contains the schema of our files.
+Use the [crawler feature](https://docs.aws.amazon.com/glue/latest/dg/add-crawler.html) of AWS Glue to traverse the JSON files (created in Module 2) in the `Firehose/` prefix of our S3 bucket. Verify that the newly created Data Catalog contains the schema of our files. If the Data type for the schema is incorrect, change this manually referring to the [Data Dictionary](http://www.nyc.gov/html/tlc/downloads/pdf/data_dictionary_trip_records_yellow..pdf).
 
 
 <details>
@@ -63,6 +63,8 @@ eg. S3://YOUR_BUCKET/Firehose/
 1. After successfully creating the crawler, select and **Run Crawler**
 
 1. After a few minutes, verify that the Data Catalog has been created under **Databases** and **Tables**, with the JSON schema being detected.
+
+1. Verify if the Data Type for the schema is correct by referring to the [data dictionary](http://www.nyc.gov/html/tlc/downloads/pdf/data_dictionary_trip_records_yellow.pdf) and manually specifying if required.
 
 </p></details>
 
