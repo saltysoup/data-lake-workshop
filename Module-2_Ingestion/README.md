@@ -171,18 +171,18 @@ Verify that the data is now in JSON format by downloading an object from your S3
 
 1. Create a new Kinesis Firehose from the AWS console or CLI and select the *Source* to the Kinesis Data Stream you created previously.
 
-1. Do not change the values for *Transform source records with AWS Lambda* or *Convert record format* and proceed to the next page (we will cover this in the next module).
+1. Do not change the values for **Transform source records with AWS Lambda** or **Convert record format** and proceed to the next page (we will cover this in the next module).
 
-1. Select *Amazon S3* as the destination and choose **YOUR_BUCKET_NAME** and **Firehose/** for Prefix and proceed to the next page.
+1. Select **Amazon S3** as the destination and choose **YOUR_BUCKET_NAME** and `Firehose/` for **Prefix** and proceed to the next page.
 
-1. Select *Create new or choose* under IAM role and use the default generated policy. Proceed to finish the Firehose launch wizard.
+1. Select **Create new or choose** under IAM role and use the default generated policy. Proceed to finish the Firehose launch wizard.
 
 1. Navigate to your Amazon S3 Bucket and verify that new objects are being created in S3://YOUR_BUCKET/Firehose/YYYY/MM/DD/.. Download and confirm that the records are in JSON format and automatically batched to 5MB objects (default value).
 
 </p></details>
 
 ### 4. [Advanced - Optional] Data Processing (consumer) with AWS Lambda
-Examples of Data Consumers for near-real time streams of data include Hadoop Clusters, Apache Storm and Apache Spark for downstream processing and applications.
+Examples of Data Consumers for near real-time streams of data include Hadoop Clusters, Apache Storm and Apache Spark for downstream processing and applications.
 
 In this step, you'll be creating a consumer for the Kinesis Data Stream by creating a new lambda function that will decode the JSON payload and output to the console.
 
