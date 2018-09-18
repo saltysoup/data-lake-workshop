@@ -7,7 +7,7 @@ We will also explore how to use the AWS CLI to interact with the S3 bucket, and 
 
 ## Data Set
 
-The data set that you are going to use is a public data set that includes trip records from all trips completed by Yellow taxis in New York City in the month of [December, 2017](http://www.nyc.gov/html/tlc/html/about/trip_record_data.shtml) (~9508278 rows). Records include fields capturing pick-up and drop-off dates/times, pick-up and drop-off locations, trip distances, itemized fares, rate types, payment types, and driver-reported passenger counts.
+The data set that you are going to use is a public data set that includes trip records from all trips completed by Yellow taxis in New York City in the month of [December, 2017](http://www.nyc.gov/html/tlc/html/about/trip_record_data.shtml) (~9508278 rows). Records include fields capturing pick-up and drop-off dates/times, pick-up and drop-off locations, trip distances, itemized fares, rate types, payment types, and driver-reported passenger counts. The data set has been split into smaller, individual files of 50k rows to better reflect a time series of streaming data.
 
 By the end of the workshop, our goal is to convert the row based, CSV file format to a more efficient, column based Apache Parquet format.
 
@@ -69,9 +69,7 @@ Execute the following command making sure to replace `YOUR_BUCKET_NAME` with the
 
     ssh -i <your_local_ssh_key.pem> ec2-user@<EC2_Public_IP_Address>
 
-    wget https://s3.amazonaws.com/nyc-tlc/trip+data/yellow_tripdata_2017-12.csv
-
-    aws s3 cp yellow_tripdata_2017-12.csv s3://YOUR_BUCKET_NAME/raw/ --region YOUR_BUCKET_REGION
+    aws s3 sync s3://injae-groupm/ s3://YOUR_BUCKET_NAME/raw/ --region YOUR_BUCKET_REGION
 
 If the command was successful, you should see a list of objects that were copied to your bucket.
 </p></details>
@@ -104,45 +102,73 @@ You can view successful lambda invocation in the lambda console and the console 
 
 1. Finish Creating the function
 
-1. Upload the taxi data set again to the S3 bucket (check upload path to /raw) and look for Invocations in the Monitoring Tab from Lambda console. Check for a console output by clicking on View logs in CloudWatch. You should have an output similar to this CONTENT TYPE: text/csv
+1. Upload the taxi data set again to the S3 bucket (check upload path to /raw) and look for Invocations in the Monitoring Tab from Lambda console. Check for console output by clicking on View logs in CloudWatch. You should have an output similar to this CONTENT TYPE: text/csv
+
+    aws s3 cp s3://YOUR_BUCKET/raw/ s3://YOUR_BUCKET/raw/ --recursive --metadata-directive REPLACE --region YOUR_BUCKET_REGION
 
 </p></details>
 
 ### 4. [Advanced - Optional] Basic ETL with AWS Lambda
 
-Create a Lambda function that will parse a portion (1/10th) of the taxi data set and look for rows where the value for VendorID column is 2. Output the results into a new CSV file called `yellow_tripdata_2017-12-VendorID-2.csv` in prefix VendorID2.
+Create a Lambda function that will parse the taxi data files and look for rows where the value for VendorID column is 2. Then, output the results into new CSV files called `FILENAME-VendorID-2.csv` in prefix VendorID2.
 
-eg. S3://YOUR_BUCKET/VendorID2/yellow_tripdata_2017-12-VendorID-2.csv
+eg. S3://YOUR_BUCKET/VendorID2/0-VendorID-2.csv
 
-Normally, you would use an alternative compute method such as EC2 or distributed MapReduce/Spark for long running jobs involving large amount of data. This task is demonstrate a serverless way to ETL (or when the incoming file sizes are small)
+Normally, you would use an alternative compute method such as EC2 or distributed MapReduce/Spark for long running jobs involving large amount of data. This task is demonstrate a serverless way to ETL (or when the incoming file sizes are small enough for lambda)
 
 <details>
 <summary><strong>Example Python Lambda code (expand for details)</strong></summary><p>
 
-1. Create a smaller subset of data set (approx 10%)
-head -n 950828 yellow_tripdata_2017-12.csv > yellow_tripdata_2017-12-small.csv
-
-1. Upload to S3
-aws s3 cp yellow_tripdata_2017-12-small.csv s3://injae-groupm-dataraw/VendorID2/
+1. Create a new lambda function that will be triggered by new objects created in the /raw prefix
 
 1. Lambda function with S3 event trigger
 ``` python
 import io
+import os
+import json
+import urllib.parse
 import boto3
 import pandas as pd
 
-s3_client = boto3.client("s3") 
-BUCKET_NAME = "injae-groupm-dataraw"
-PREFIX_NAME = "VendorID2"
-FILE_NAME = "yellow_tripdata_2017-12-small.csv"
+print('Loading function')
 
-# load the data in memory (lambda's /tmp allows 512MB ephemeral disk space)
-s3_response_object = s3_client.get_object(Bucket=BUCKET_NAME, Key=PREFIX_NAME + "/" + FILE_NAME)
+s3_client = boto3.client('s3')
 
-# using pandas dataframe for interacting with data
-df = pd.DataFrame()
-for chunk in pd.read_csv(io.BytesIO(s3_response_object['Body'].read()),chunksize=2000):
-    df = pd.concat([df, chunk], ignore_index=True)
+
+def lambda_handler(event, context):
+    #print("Received event: " + json.dumps(event, indent=2))
+
+    # Get the object from the event
+    BUCKET_NAME = event['Records'][0]['s3']['bucket']['name']
+    FILE_NAME = urllib.parse.unquote_plus(event['Records'][0]['s3']['object']['key'], encoding='utf-8')
+    PREFIX_NAME = "raw"
+
+    # load the data in memory (lambda's /tmp allows 512MB ephemeral disk space)
+    s3_response_object = s3_client.get_object(Bucket=BUCKET_NAME, Key=PREFIX_NAME + "/" + FILE_NAME)
+
+    # using pandas dataframe for interacting with data
+    df = pd.read_csv(io.BytesIO(s3_response_object['Body'].read()))
+    df2 = df.loc[df['VendorID'] == 2]
+
+    try:                               
+        print ("writing data to file")
+        fileName = "/tmp/{}".format(FILE_NAME)
+        df2.to_csv(fileName, sep=',', encoding='utf-8')
+        data = open(fileName, 'rb')
+        # upload to s3 and delete tmp file
+        response = s3_client.put_object(
+            Bucket=BUCKET_NAME,
+            Key="VendorID2" + "/" + FILE_NAME + "-VendorID-2.csv",
+            Body=data
+        )
+        print ("S3 upload response: {}".format(response))
+        data.close()
+        os.remove(fileName) # clean up
+    except Exception as e:
+        print ("something went wrong: {}".format(e))
+        pass
+
+    
 
 
 ```
