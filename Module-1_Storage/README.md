@@ -68,12 +68,10 @@ Upload the NYC data set for this module to your S3 bucket inside prefix /raw. Yo
 <summary><strong>CLI step-by-step instructions (expand for details)</strong></summary><p>
 
 Execute the following command making sure to replace `YOUR_BUCKET_NAME` with the name you used in the previous section and `YOUR_BUCKET_REGION` with the region code (e.g. ap-southeast-2) where you created your bucket.
-    ``` shell
     ssh -i <your_local_ssh_key.pem> ec2-user@<EC2_Public_IP_Address>
-    ```
-    ``` shell
+    
     aws s3 cp s3://injae-groupm/ s3://YOUR_BUCKET_NAME/raw/ --recursive --region YOUR_BUCKET_REGION
-    ```
+    
 If the command was successful, you should see a list of objects that were copied to your bucket.
 </p></details>
 
@@ -109,9 +107,7 @@ You can view successful lambda invocation in the lambda console and the console 
 
 1. Upload the taxi data set again to the S3 bucket (check upload path to /raw) and look for Invocations in the Monitoring Tab from Lambda console. Check for console output by clicking on View logs in CloudWatch. You should have an output similar to this CONTENT TYPE: text/csv
     
-    ``` shell
     aws s3 cp s3://YOUR_BUCKET/raw/ s3://YOUR_BUCKET/raw/ --recursive --metadata-directive REPLACE --region YOUR_BUCKET_REGION
-    ```
 
 </p></details>
 
